@@ -3,6 +3,8 @@
 import pathlib
 from unittest.mock import patch
 
+from pxr import Usd, UsdGeom
+
 from tests.util.ConverterTestCase import ConverterTestCase
 from urdf_usd_converter._impl.convert import Converter
 
@@ -36,7 +38,36 @@ class TestConverterMeshes(ConverterTestCase):
             if "Unsupported mesh format:" in str(call):
                 warning_dxf_found = True
 
-        self.assertTrue(warning_stl_found, "Expected warning about stl format not found.")
+        self.assertFalse(warning_stl_found, "Expected warning about stl format not found.")
         self.assertTrue(warning_obj_found, "Expected warning about obj format not found.")
         self.assertTrue(warning_dae_found, "Expected warning about dae format not found.")
         self.assertTrue(warning_dxf_found, "Expected warning about dxf format not found.")
+
+        stage: Usd.Stage = Usd.Stage.Open(asset_path.path)
+        self.assertIsValidUsd(stage)
+
+        default_prim = stage.GetDefaultPrim()
+        geometry_scope_prim = stage.GetPrimAtPath(default_prim.GetPath().AppendChild("Geometry"))
+        self.assertIsNotNone(geometry_scope_prim)
+
+        # Test STL mesh conversion
+        link_stl_prim = stage.GetPrimAtPath(geometry_scope_prim.GetPath().AppendChild("link_mesh_stl"))
+        self.assertIsNotNone(link_stl_prim)
+        self.assertTrue(link_stl_prim.IsA(UsdGeom.Xform))
+
+        stl_mesh_prim = stage.GetPrimAtPath(link_stl_prim.GetPath().AppendChild("box"))
+        self.assertIsNotNone(stl_mesh_prim)
+        self.assertTrue(stl_mesh_prim.IsA(UsdGeom.Mesh))
+        self.assertTrue(stl_mesh_prim.GetReferences())
+
+        usd_mesh_stl = UsdGeom.Mesh(stl_mesh_prim)
+        self.assertTrue(usd_mesh_stl.GetPointsAttr().HasAuthoredValue())
+        self.assertTrue(usd_mesh_stl.GetFaceVertexCountsAttr().HasAuthoredValue())
+        self.assertTrue(usd_mesh_stl.GetFaceVertexIndicesAttr().HasAuthoredValue())
+        # The sample box.stl has normals and they are authored as a primvar
+        self.assertFalse(usd_mesh_stl.GetNormalsAttr().HasAuthoredValue())
+        normals_primvar: UsdGeom.Primvar = UsdGeom.PrimvarsAPI(usd_mesh_stl).GetPrimvar("normals")
+        self.assertTrue(normals_primvar.IsDefined())
+        self.assertTrue(normals_primvar.HasAuthoredValue())
+        self.assertTrue(normals_primvar.GetIndicesAttr().HasAuthoredValue())
+        self.assertEqual(UsdGeom.Imageable(stl_mesh_prim).GetPurposeAttr().Get(), UsdGeom.Tokens.default_)
