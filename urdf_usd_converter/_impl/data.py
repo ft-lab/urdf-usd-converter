@@ -34,3 +34,4 @@ class ConversionData:
     comment: str
     link_hierarchy: LinkHierarchy
     mesh_cache: MeshCache
+    ros2_packages: list[dict[str, str]]
