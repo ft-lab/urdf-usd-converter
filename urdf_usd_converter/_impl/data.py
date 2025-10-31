@@ -32,3 +32,4 @@ class ConversionData:
     scene: bool
     comment: str
     mesh_data: ConversionMeshData
+    ros2_packages: list[dict[str, str]]

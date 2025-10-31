@@ -6,6 +6,7 @@ import usdex.core
 from pxr import Gf, Tf, Usd
 
 from .data import ConversionData, Tokens
+from .ros2_package import resolve_ros2_package_paths
 from .utils import float3_to_vec3d
 
 __all__ = ["convert_meshes"]
@@ -29,7 +30,12 @@ def convert_meshes(data: ConversionData):
     urdf_dir = data.urdf_parser.input_file.parent
 
     for mesh, mesh_name, safe_name in zip(meshes, data.mesh_data.mesh_names, data.mesh_data.safe_names):
-        filename = pathlib.Path(mesh[0]) if pathlib.Path(mesh[0]).is_absolute() else urdf_dir / pathlib.Path(mesh[0])
+        # Resolve the ROS2 package paths.
+        resolved_path = resolve_ros2_package_paths(mesh[0], data) if mesh[0].startswith("package://") else mesh[0]
+        if resolved_path != mesh[0]:
+            Tf.Status(f"Resolved ROS2 package path: {mesh[0]} -> {resolved_path}")
+
+        filename = pathlib.Path(resolved_path) if pathlib.Path(resolved_path).is_absolute() else urdf_dir / pathlib.Path(resolved_path)
         scale = float3_to_vec3d(mesh[1])
 
         mesh_prim: Usd.Prim = usdex.core.defineXform(geo_scope, safe_name).GetPrim()

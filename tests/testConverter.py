@@ -45,3 +45,13 @@ class TestConverter(ConverterTestCase):
         converter = Converter()
         with self.assertRaisesRegex(ValueError, r".*No root link found. The joint structure is a loop.*"):
             converter.convert(input_path, output_dir)
+
+    def test_ros2_package_name_without_relative_path(self):
+        # When an invalid path is specified in the ROS2 package URI.
+
+        input_path = "tests/data/error_ref_ros2_package.urdf"
+        output_dir = self.tmpDir()
+
+        converter = Converter()
+        with self.assertRaisesRegex(ValueError, r".*Invalid ROS2 package URI. No relative path specified: package://test_package.*"):
+            converter.convert(input_path, output_dir)
