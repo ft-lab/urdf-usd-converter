@@ -45,3 +45,13 @@ class TestConverter(ConverterTestCase):
         converter = Converter()
         with self.assertRaisesRegex(ValueError, r".*No root link found. The joint structure is a loop.*"):
             converter.convert(input_path, output_dir)
+
+    def test_load_error_obj_no_exist_filename(self):
+        # A non-existent obj file is specified.
+
+        input_path = "tests/data/error_obj_no_exist_filename.urdf"
+        output_dir = str(pathlib.Path(self.tmpDir()) / "error_obj_no_exist_filename")
+
+        converter = Converter()
+        with self.assertRaisesRegex(RuntimeError, r".*could not be parsed..*"):
+            converter.convert(input_path, output_dir)
