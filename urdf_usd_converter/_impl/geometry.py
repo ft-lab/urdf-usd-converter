@@ -67,4 +67,6 @@ def convert_mesh(parent: Usd.Prim, name: str, mesh: ElementMesh, data: Conversio
     scale_vec3d = float3_to_vec3d(scale)
     usdex.core.setLocalTransform(prim.GetPrim(), Gf.Vec3d(0), Gf.Quatf.GetIdentity(), Gf.Vec3f(scale_vec3d))
 
-    return UsdGeom.Mesh(prim)
+    # When converting from OBJ or DAE files, if there are multiple meshes,
+    # they are stored within the Xform node.
+    return UsdGeom.Mesh(prim) if prim.IsA(UsdGeom.Mesh) else UsdGeom.Xform(prim)

@@ -3,8 +3,9 @@
 import pathlib
 
 import usdex.core
-from pxr import Gf, Tf, Usd
+from pxr import Gf, Tf, Usd, UsdGeom
 
+from .conversion_collada import ConversionCollada
 from .data import ConversionData, Tokens
 from .utils import float3_to_vec3d
 
@@ -40,12 +41,12 @@ def convert_meshes(data: ConversionData):
 
         if mesh_name != safe_name:
             usdex.core.setDisplayName(mesh_prim, mesh_name)
-        convert_mesh(mesh_prim, filename, scale)
+        convert_mesh(mesh_prim, filename, scale, data)
 
     usdex.core.saveStage(data.libraries[Tokens.Geometry], comment=f"Mesh Library for {data.urdf_parser.get_robot_name()}. {data.comment}")
 
 
-def convert_mesh(prim: Usd.Prim, input_path: pathlib.Path, scale: Gf.Vec3d):
+def convert_mesh(prim: Usd.Prim, input_path: pathlib.Path, scale: Gf.Vec3d, data: ConversionData):
     mesh_prim = None
     if input_path.suffix.lower() == ".stl":
         # TODO: Implement STL conversion.
@@ -54,8 +55,7 @@ def convert_mesh(prim: Usd.Prim, input_path: pathlib.Path, scale: Gf.Vec3d):
         # TODO: Implement OBJ conversion.
         Tf.Warn(f"The obj format is not yet supported: {input_path}")
     elif input_path.suffix.lower() == ".dae":
-        # TODO: Implement DAE conversion.
-        Tf.Warn(f"The dae format is not yet supported: {input_path}")
+        mesh_prim = convert_dae(prim, input_path, data)
     else:
         Tf.Warn(f"Unsupported mesh format: {input_path}")
 
@@ -63,3 +63,9 @@ def convert_mesh(prim: Usd.Prim, input_path: pathlib.Path, scale: Gf.Vec3d):
         usdex.core.setLocalTransform(mesh_prim.GetPrim(), Gf.Vec3d(0), Gf.Quatf.GetIdentity(), Gf.Vec3f(scale))
 
     return mesh_prim
+
+
+def convert_dae(prim: Usd.Prim, input_path: pathlib.Path, data: ConversionData) -> UsdGeom.Mesh:
+    conversion_collada = ConversionCollada(input_path)
+    conversion_collada.convert(prim, data)
+    return prim
