@@ -43,3 +43,13 @@ class TestConverter(ConverterTestCase):
         converter = urdf_usd_converter.Converter()
         with self.assertRaisesRegex(ValueError, r".*Closed loop articulations are not supported.*"):
             converter.convert(input_path, output_dir)
+
+    def test_load_error_dae_no_exist_filename(self):
+        # A non-existent dae file is specified.
+
+        input_path = "tests/data/error_dae_no_exist_filename.urdf"
+        output_dir = str(pathlib.Path(self.tmpDir()) / "error_dae_no_exist_filename")
+
+        converter = urdf_usd_converter.Converter()
+        with self.assertRaisesRegex(RuntimeError, r".*No such file or directory:.*"):
+            converter.convert(input_path, output_dir)

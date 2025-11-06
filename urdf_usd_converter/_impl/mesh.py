@@ -6,6 +6,7 @@ import stl
 import usdex.core
 from pxr import Tf, Usd, UsdGeom, Vt
 
+from .conversion_collada import ConversionCollada
 from .data import ConversionData, Tokens
 from .numpy import convert_vec3f_array
 
@@ -58,8 +59,7 @@ def convert_mesh(prim: Usd.Prim, input_path: pathlib.Path, data: ConversionData)
         # TODO: Implement OBJ conversion.
         Tf.Warn(f"The obj format is not yet supported: {input_path}")
     elif input_path.suffix.lower() == ".dae":
-        # TODO: Implement DAE conversion.
-        Tf.Warn(f"The dae format is not yet supported: {input_path}")
+        mesh_prim = convert_dae(prim, input_path, data)
     else:
         Tf.Warn(f"Unsupported mesh format: {input_path}")
 
@@ -90,3 +90,9 @@ def convert_stl(prim: Usd.Prim, input_path: pathlib.Path, data: ConversionData) 
     if not usd_mesh:
         Tf.RaiseRuntimeError(f'Failed to convert mesh "{prim.GetPath()}" from {input_path}')
     return usd_mesh
+
+
+def convert_dae(prim: Usd.Prim, input_path: pathlib.Path, data: ConversionData) -> UsdGeom.Mesh:
+    conversion_collada = ConversionCollada(input_path)
+    conversion_collada.convert(prim, data)
+    return prim
