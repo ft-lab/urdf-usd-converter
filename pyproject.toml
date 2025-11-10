@@ -106,8 +106,15 @@ cmd  = "python tools/update_markdown_for_pypi.py README.md"
 requires = ["hatchling", "requests"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.hooks.custom]
+path = "tools/install_urdf_schema.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["urdf_usd_converter"]
+# Include all plugin files that are downloaded during build as artifacts
+artifacts = [
+    "urdf_usd_converter/plugins/**/*",
+]
 
 [tool.ruff]
 line-length = 150

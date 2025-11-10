@@ -22,6 +22,7 @@ from .utils import (
     float3_to_vec3d,
     get_geometry_name,
     radians_to_degrees,
+    set_schema_attribute,
     set_transform,
 )
 

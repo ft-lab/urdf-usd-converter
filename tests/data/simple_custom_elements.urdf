@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- The robot name is used as the usd file name. -->
+<!-- Since '-' cannot be used as a usd prim name, the prim name will be replaced. -->
+<robot name="simple_custom_elements">
+  <!-- custom elements, attributes -->
+  <foo name="custom_element">
+    <custom name="custom_attribute" value="custom_value"/>
+    <custom_text>This is custom text.</custom_text>
+  </foo>
+  <link name="base_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.5 0 0"/>
+      <geometry>
+        <box size="0.5 0.5 0.5"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="link_box">
+    <visual>
+      <origin rpy="0 0 0" xyz="0.5 0 0"/>
+
+      <!-- custom element -->
+      <custom attr="attr foo in link" />
+
+      <geometry>
+        <box size="0.5 0.5 0.5"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="joint_box" type="fixed">
+    <parent link="base_link"/>
+    <child link="link_box"/>
+    <calibration rising="0.3" falling="0.2" reference_position="0.1"/>
+    <dynamics damping="0.0" friction="0.0"/>
+    <limit effort="30" velocity="1.0" lower="-2.2" upper="0.7" />
+    <safety_controller k_velocity="10" k_position="15" soft_lower_limit="-2.0" soft_upper_limit="0.5" />
+    <mimic joint="joint_box" multiplier="2.0" offset="1.0"/>
+
+    <!-- custom element -->
+    <custom attr="attr foo in joint">
+      <custom_text>This is custom text in joint.</custom_text>
+    </custom>
+
+  </joint>
+
+  <transmission name="simple_trans">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="foo_joint">
+      <hardwareInterface>EffortJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="foo_motor">
+      <mechanicalReduction>50</mechanicalReduction>
+      <hardwareInterface>EffortJointInterface</hardwareInterface>
+    </actuator>
+  </transmission>
+</robot>

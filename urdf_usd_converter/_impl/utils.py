@@ -5,7 +5,7 @@ import pathlib
 from typing import Any
 
 import usdex.core
-from pxr import Gf, Sdf, Usd, UsdGeom
+from pxr import Gf, Sdf, Tf, Usd, UsdGeom
 
 from urdf_usd_converter._impl.urdf_parser.elements import (
     ElementCollision,
@@ -23,6 +23,7 @@ __all__ = [
     "get_geometry_name",
     "radians_to_degrees",
     "set_custom_attribute",
+    "set_schema_attribute",
     "set_transform",
 ]
 
@@ -133,6 +134,27 @@ def multiply_transforms_preserve_scale(transform1: Gf.Transform, transform2: Gf.
     result.SetScale(combined_scale)
 
     return result
+
+
+def set_schema_attribute(prim: Usd.Prim, name: str, value: Any | None):
+    """
+    Set a schema attribute on a prim.
+
+    Args:
+        prim: The prim to set the schema attribute on.
+        name: The name of the schema attribute.
+        value: The value of the schema attribute.
+    """
+    if value is None:
+        return
+
+    attr: Usd.Attribute = prim.GetAttribute(name)
+    if not attr.IsValid():
+        Tf.RaiseCodingError(f'Attribute "{name}" is not valid for prim <{prim.GetPath()}> with schemas {prim.GetAppliedSchemas()}')
+    # Only set the value if it is different from the schema default value
+    default = attr.Get()
+    if default is None or value != default:
+        attr.Set(value)
 
 
 def set_custom_attribute(prim: Usd.Prim, name: str, type_name: Sdf.ValueTypeNames, value: Any):

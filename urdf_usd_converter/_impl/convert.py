@@ -9,11 +9,13 @@ from pxr import Sdf, Tf, Usd, UsdGeom, UsdPhysics
 
 from ._flatten import export_flattened
 from .conversion_mesh_data import ConversionMeshData
+from .custom_elements import convert_custom_elements
 from .data import ConversionData, Tokens
 from .link import convert_links
 from .material import convert_materials
 from .mesh import convert_meshes
 from .scene import convert_scene
+from .transmission import convert_transmissions
 from .urdf_parser.elements import ElementRobot
 from .urdf_parser.parser import URDFParser
 from .utils import get_authoring_metadata
@@ -115,12 +117,19 @@ class Converter:
         data.content[Tokens.Physics].SetMetadata(UsdPhysics.Tokens.kilogramsPerUnit, 1)
         data.references[Tokens.Physics] = {}
 
+        # convert custom elements.
+        convert_custom_elements(data)
+
         # author the physics scene
         if self.params.scene:
             convert_scene(data)
 
         # Joints and links are converted into a hierarchical structure
         convert_links(data)
+
+        # convert transmissions.
+        # This is stored in the custom schema "UrdfTransmissionAPI".
+        convert_transmissions(data)
 
         # create the asset interface
         usdex.core.addAssetInterface(asset_stage, source=data.content[Tokens.Contents])
