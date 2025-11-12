@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
 import pathlib
+import warnings
 
 from tests.util.ConverterTestCase import ConverterTestCase
 from urdf_usd_converter._impl.urdf_parser.parser import URDFParser
@@ -58,16 +59,6 @@ class TestURDFParser(ConverterTestCase):
         parser = URDFParser(model_path)
 
         with self.assertRaisesRegex(RuntimeError, r".*rgba: Invalid value: 0.0 1.0 \(line: 5\).*"):
-            parser.parse()
-
-    def test_load_error_different_place(self):
-        # Load the specified URDF file.
-        model_path = pathlib.Path("tests/data/error_different_place.urdf")
-        parser = URDFParser(model_path)
-
-        with self.assertRaisesRegex(
-            RuntimeError, r".*geometry: Invalid element type. This uses a reserved tag, but in the wrong place \(line: 8\).*"
-        ):
             parser.parse()
 
     def test_load_error_no_material_name(self):
@@ -221,6 +212,22 @@ class TestURDFParser(ConverterTestCase):
 
         with self.assertRaisesRegex(RuntimeError, r".*transmission: Transmission name 'transmission_1' already exists \(line: 8\).*"):
             parser.parse()
+
+    def test_load_warning_different_place(self):
+        # Load the specified URDF file.
+        model_path = pathlib.Path("tests/data/warning_different_place.urdf")
+        parser = URDFParser(model_path)
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            # Record all warnings.
+            warnings.simplefilter("always")
+
+            parser.parse()
+
+            self.assertEqual(len(warning_list), 1)
+            self.assertEqual(
+                str(warning_list[0].message), "geometry: Invalid element type. This uses a reserved tag, but in the wrong place (line: 10)"
+            )
 
     def test_has_no_material(self):
         # Load the specified URDF file.

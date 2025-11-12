@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
 import re
+import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -229,7 +230,8 @@ class URDFParser:
 
         # Error if using reserved tags but structure is different.
         if not element:
-            raise ValueError(self._get_error_message("Invalid element type. This uses a reserved tag, but in the wrong place", node))
+            warnings.warn(self._get_error_message("Invalid element type. This uses a reserved tag, but in the wrong place", node))
+            element = ElementUndefined()
 
         element.tag = node.tag
         element.path = current_path
@@ -243,7 +245,6 @@ class URDFParser:
                 element,
                 ElementRobot
                 | ElementMaterialGlobal
-                | ElementMaterial
                 | ElementLink
                 | ElementJoint
                 | ElementTransmission
@@ -502,13 +503,13 @@ class URDFParser:
     def _get_defined_material_names(self) -> list[str]:
         """
         Get the defined material names.
-
         Returns:
             A list of defined material names.
         """
         # Create a list of defined material names.
         # This includes both global materials and materials specified within the visual.
         defined_material_names = [material.name for material in self.root_element.materials]
+
         for link in self.root_element.links:
             for visual in link.visuals:
                 material = visual.material
