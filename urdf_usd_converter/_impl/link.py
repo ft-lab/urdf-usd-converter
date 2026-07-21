@@ -142,7 +142,11 @@ def apply_inertial(prim: Usd.Prim, link: ElementLink, data: ConversionData):
 
     if link.inertial.origin:
         position = Gf.Vec3f(link.inertial.origin.get_with_default("xyz"))
-        orientation = float3_to_quatf(link.inertial.origin.get_with_default("rpy"))
+        if link.inertial.origin.quat_xyzw is not None:
+            quat_xyzw = link.inertial.origin.get_with_default("quat_xyzw")
+            orientation = Gf.Quatf(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
+        else:
+            orientation = float3_to_quatf(link.inertial.origin.get_with_default("rpy"))
         mass_api.GetCenterOfMassAttr().Set(position)
         axes = mass_api.GetPrincipalAxesAttr().Get()
         mass_api.GetPrincipalAxesAttr().Set(orientation * axes)

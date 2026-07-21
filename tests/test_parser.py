@@ -131,7 +131,7 @@ class TestURDFParser(ConverterTestCase):
         with usdex.test.ScopedDiagnosticChecker(
             self,
             [
-                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*Geometry must have one of the following: box, sphere, cylinder, or mesh.*"),
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*Geometry must have one of the following: box, sphere, cylinder, capsule, or mesh.*"),
             ],
             level=usdex.core.DiagnosticsLevel.eWarning,
         ):
@@ -147,7 +147,7 @@ class TestURDFParser(ConverterTestCase):
             [
                 (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*foo: Invalid geometry type.*"),
                 (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*material: link: Material name 'green' not found.*"),
-                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*Geometry must have one of the following: box, sphere, cylinder, or mesh.*"),
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*Geometry must have one of the following: box, sphere, cylinder, capsule, or mesh.*"),
             ],
             level=usdex.core.DiagnosticsLevel.eWarning,
         ):
@@ -161,7 +161,7 @@ class TestURDFParser(ConverterTestCase):
         with usdex.test.ScopedDiagnosticChecker(
             self,
             [
-                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*Geometry must have one of the following: box, sphere, cylinder, or mesh.*"),
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*Geometry must have one of the following: box, sphere, cylinder, capsule, or mesh.*"),
             ],
             level=usdex.core.DiagnosticsLevel.eWarning,
         ):
@@ -294,7 +294,7 @@ class TestURDFParser(ConverterTestCase):
         self.assertEqual(root_element.tag, "robot")
         self.assertEqual(root_element.name, "verifying_elements")
         self.assertEqual(root_robot_name, "verifying_elements")
-        self.assertEqual(root_element.get_with_default("version"), "1.0")
+        self.assertEqual(root_element.get_with_default("version"), "1.1")
 
     def test_find_materials(self):
         # Get the root element.
@@ -366,6 +366,7 @@ class TestURDFParser(ConverterTestCase):
         self.assertTrue(inertial.origin)
         self.assertEqual(inertial.origin.get_with_default("xyz"), (0.0, 0.0, 0.3))
         self.assertEqual(inertial.origin.get_with_default("rpy"), (0.0, 0.0, 0.0))
+        self.assertEqual(inertial.origin.get_with_default("quat_xyzw"), (0.0, 0.70710678, 0.0, 0.70710678))
         self.assertTrue(inertial.mass)
         self.assertEqual(inertial.mass.get_with_default("value"), 1.0)
         self.assertTrue(inertial.inertia)
@@ -459,7 +460,7 @@ class TestURDFParser(ConverterTestCase):
         self.assertTrue(visual)
         geometry = visual.geometry
         self.assertTrue(geometry)
-        self.assertEqual(geometry.shape.tag, "cylinder")
+        self.assertEqual(geometry.shape.tag, "capsule")
         self.assertEqual(geometry.shape.get_with_default("radius"), 0.5)
         self.assertEqual(geometry.shape.get_with_default("length"), 1.0)
         material = visual.material
@@ -712,3 +713,16 @@ class TestURDFParser(ConverterTestCase):
         self.assertEqual(joint.parent.link, "BaseLink")
         self.assertTrue(joint.child)
         self.assertEqual(joint.child.link, "link2")
+
+    def test_load_warning_urdf_11_capsule_quatxyz(self):
+        model_path = pathlib.Path("tests/data/warning_urdf_11_capsule_quatxyz.urdf")
+        parser = URDFParser(model_path)
+
+        with usdex.test.ScopedDiagnosticChecker(
+            self,
+            [
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*capsule and quat_xyzw are unavailable when the URDF version is earlier than 1.1.*"),
+            ],
+            level=usdex.core.DiagnosticsLevel.eWarning,
+        ):
+            parser.parse()

@@ -10,6 +10,7 @@ from .elements import (
     ElementAxis,
     ElementBase,
     ElementCalibration,
+    ElementCapsule,
     ElementChild,
     ElementCollision,
     ElementColor,
@@ -81,6 +82,9 @@ class URDFParser:
 
         except Exception as e:
             raise RuntimeError(f"Error parsing XML: {e}")
+
+        # Warn if capsule or quat_xyzw is being used and the URDF version is earlier than 1.1.
+        self._warning_urdf_version_11()
 
     def get_root_element(self) -> ElementRobot:
         """
@@ -255,6 +259,7 @@ class URDFParser:
         element.size = self._convert_attribute_float3(node, "size")
         element.xyz = self._convert_attribute_float3(node, "xyz")
         element.rpy = self._convert_attribute_float3(node, "rpy")
+        element.quat_xyzw = self._convert_attribute_float4(node, "quat_xyzw")
         if "radius" in node.attrib:
             element.radius = float(node.attrib["radius"])
         if "length" in node.attrib:
@@ -406,7 +411,7 @@ class URDFParser:
                 prev_element.verbose = element
 
         elif prev_element_type == ElementGeometry:
-            if node.tag == "box" or node.tag == "sphere" or node.tag == "cylinder" or node.tag == "mesh":
+            if node.tag == "box" or node.tag == "sphere" or node.tag == "cylinder" or node.tag == "mesh" or node.tag == "capsule":
                 prev_element.shape = element
 
         elif prev_element_type == ElementInertial:
@@ -519,13 +524,19 @@ class URDFParser:
                 if visual and visual.geometry:
                     geometry = visual.geometry.shape
                     if not geometry:
-                        Tf.Warn(self._get_error_message("Geometry must have one of the following: box, sphere, cylinder, or mesh", visual.geometry))
+                        Tf.Warn(
+                            self._get_error_message(
+                                "Geometry must have one of the following: box, sphere, cylinder, capsule, or mesh", visual.geometry
+                            )
+                        )
             for collision in link.collisions:
                 if collision.geometry:
                     geometry = collision.geometry.shape
                     if not geometry:
                         Tf.Warn(
-                            self._get_error_message("Geometry must have one of the following: box, sphere, cylinder, or mesh", collision.geometry)
+                            self._get_error_message(
+                                "Geometry must have one of the following: box, sphere, cylinder, capsule, or mesh", collision.geometry
+                            )
                         )
 
     def _get_element_class(self, tag_name: str, prev_element_tag: str) -> type[ElementBase]:
@@ -688,3 +699,33 @@ class URDFParser:
             for e in element.__dict__:
                 if isinstance(element.__dict__[e], ElementBase):
                     self._get_undefined_elements_nested(element.__dict__[e], undefined_elements)
+
+    def _warning_urdf_version_11(self):
+        """
+        If capsule or quat_xyzw is being used and the URDF version is earlier than 1.1, output a warning.
+        """
+        version = float(self.root_element.get_with_default("version"))
+        if version >= 1.1:
+            return
+
+        # Check whether capsule or quat_xyzw is being used.
+        used_capsule = False
+        used_quat_xyzw = False
+        for link in self.root_element.links:
+            for visual in link.visuals:
+                if visual.geometry and visual.geometry.shape and isinstance(visual.geometry.shape, ElementCapsule):
+                    used_capsule = True
+                if visual.origin and visual.origin.quat_xyzw:
+                    used_quat_xyzw = True
+            for collision in link.collisions:
+                if collision.geometry and collision.geometry.shape and isinstance(collision.geometry.shape, ElementCapsule):
+                    used_capsule = True
+                if collision.origin and collision.origin.quat_xyzw:
+                    used_quat_xyzw = True
+        for joint in self.root_element.joints:
+            if joint.origin and joint.origin.quat_xyzw:
+                used_quat_xyzw = True
+
+        # If capsule or quat_xyzw is being used and the URDF version is earlier than 1.1, output a warning.
+        if used_capsule or used_quat_xyzw:
+            Tf.Warn(self._get_error_message("capsule and quat_xyzw are unavailable when the URDF version is earlier than 1.1", self.root_element))

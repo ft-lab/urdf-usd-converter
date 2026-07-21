@@ -12,6 +12,7 @@ reserved_element_names = [
     "axis",
     "box",
     "calibration",
+    "capsule",
     "child",
     "collision",
     "color",
@@ -69,6 +70,13 @@ reserved_element_attribute_names = [
             "reference_position",
             "rising",
             "falling",
+        ],
+    },
+    {
+        "element": "capsule",
+        "attributes": [
+            "radius",
+            "length",
         ],
     },
     {
@@ -188,6 +196,7 @@ reserved_element_attribute_names = [
         "attributes": [
             "xyz",
             "rpy",
+            "quat_xyzw",
         ],
     },
     {

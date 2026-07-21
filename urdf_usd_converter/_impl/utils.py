@@ -70,7 +70,11 @@ def set_transform(prim: UsdGeom.Xformable, element: ElementJoint | ElementVisual
 
     if element.origin:
         position = Gf.Vec3d(element.origin.get_with_default("xyz"))
-        orientation = float3_to_quatf(element.origin.get_with_default("rpy"))
+        if element.origin.quat_xyzw is not None:
+            quat_xyzw = element.origin.get_with_default("quat_xyzw")
+            orientation = Gf.Quatf(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
+        else:
+            orientation = float3_to_quatf(element.origin.get_with_default("rpy"))
 
     local_transform: Gf.Transform = Gf.Transform(translation=position, rotation=Gf.Rotation(orientation))
     final_transform: Gf.Transform = multiply_transforms_preserve_scale(current_transform, local_transform)
