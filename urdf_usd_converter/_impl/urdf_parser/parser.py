@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
+import math
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -57,6 +58,7 @@ class URDFParser:
         self.materials: list[dict[str, str, tuple[float, float, float, float], str]] = []
 
         self.texture_paths: list[str] = []
+        self.urdf_version: float | None = None
 
     def parse(self):
         """
@@ -85,6 +87,9 @@ class URDFParser:
 
         # Warn if capsule or quat_xyzw is being used and the URDF version is earlier than 1.1.
         self._warning_urdf_version_11()
+
+        # Warn if acceleration, deceleration, or jerk is being used and the URDF version is earlier than 1.2.
+        self._warning_urdf_version_12()
 
     def get_root_element(self) -> ElementRobot:
         """
@@ -267,6 +272,7 @@ class URDFParser:
 
         if "version" in node.attrib:
             element.version = node.attrib["version"]
+            self.urdf_version = float(element.version)
 
         if isinstance(element, ElementUndefined):
             for key, value in node.attrib.items():
@@ -334,8 +340,24 @@ class URDFParser:
                 element.upper = float(node.attrib["upper"])
             if "effort" in node.attrib:
                 element.effort = float(node.attrib["effort"])
+                if element.effort < 0.0:
+                    raise ValueError(self._get_error_message("Effort must be non-negative", node))
             if "velocity" in node.attrib:
                 element.velocity = float(node.attrib["velocity"])
+                if element.velocity < 0.0:
+                    raise ValueError(self._get_error_message("Velocity must be non-negative", node))
+            if "acceleration" in node.attrib:
+                element.acceleration = float(node.attrib["acceleration"])
+                if element.acceleration < 0.0:
+                    raise ValueError(self._get_error_message("Acceleration must be non-negative", node))
+            if "deceleration" in node.attrib:
+                element.deceleration = float(node.attrib["deceleration"])
+                if element.deceleration < 0.0:
+                    raise ValueError(self._get_error_message("Deceleration must be non-negative", node))
+            if "jerk" in node.attrib:
+                element.jerk = float(node.attrib["jerk"])
+                if element.jerk < 0.0:
+                    raise ValueError(self._get_error_message("Jerk must be non-negative", node))
 
         elif isinstance(element, ElementCalibration):
             if "reference_position" in node.attrib:
@@ -700,7 +722,7 @@ class URDFParser:
                 if isinstance(element.__dict__[e], ElementBase):
                     self._get_undefined_elements_nested(element.__dict__[e], undefined_elements)
 
-    def _warning_urdf_version_11(self):
+    def _warning_urdf_version_11(self) -> None:
         """
         If capsule or quat_xyzw is being used and the URDF version is earlier than 1.1, output a warning.
         """
@@ -715,17 +737,85 @@ class URDFParser:
             for visual in link.visuals:
                 if visual.geometry and visual.geometry.shape and isinstance(visual.geometry.shape, ElementCapsule):
                     used_capsule = True
-                if visual.origin and visual.origin.quat_xyzw:
+                if visual.origin and visual.origin.quat_xyzw is not None:
                     used_quat_xyzw = True
             for collision in link.collisions:
                 if collision.geometry and collision.geometry.shape and isinstance(collision.geometry.shape, ElementCapsule):
                     used_capsule = True
-                if collision.origin and collision.origin.quat_xyzw:
+                if collision.origin and collision.origin.quat_xyzw is not None:
                     used_quat_xyzw = True
         for joint in self.root_element.joints:
-            if joint.origin and joint.origin.quat_xyzw:
+            if joint.origin and joint.origin.quat_xyzw is not None:
                 used_quat_xyzw = True
 
         # If capsule or quat_xyzw is being used and the URDF version is earlier than 1.1, output a warning.
         if used_capsule or used_quat_xyzw:
             Tf.Warn(self._get_error_message("capsule and quat_xyzw are unavailable when the URDF version is earlier than 1.1", self.root_element))
+
+    def _warning_urdf_version_12(self) -> None:
+        """
+        If acceleration, deceleration, or jerk is being used and the URDF version is earlier than 1.2, output a warning.
+        """
+        version = float(self.root_element.get_with_default("version"))
+        if version >= 1.2:
+            return
+
+        # Check whether acceleration and deceleration are being used.
+        used_acceleration = False
+        used_deceleration = False
+        used_jerk = False
+        for joint in self.root_element.joints:
+            if joint.limit and joint.limit.acceleration is not None:
+                used_acceleration = True
+            if joint.limit and joint.limit.deceleration is not None:
+                used_deceleration = True
+            if joint.limit and joint.limit.jerk is not None:
+                used_jerk = True
+
+        if used_acceleration or used_deceleration or used_jerk:
+            Tf.Warn(
+                self._get_error_message(
+                    "acceleration, deceleration, and jerk are unavailable when the URDF version is earlier than 1.2", self.root_element
+                )
+            )
+
+    def _resolve_limit_defaults(self, limit: ElementLimit, attr_name: str) -> float | None:
+        """
+        Get the default value for the joint parameter.
+
+        The default values for joint parameters have been changed in URDF 1.2.
+
+        Args:
+            limit: The limit element.
+            attr_name: The name of the attribute.
+
+        Returns:
+            The default value for the joint parameter.
+        """
+        version = float(self.root_element.get_with_default("version"))
+        if version >= 1.2:
+            if attr_name == "lower":
+                return -math.inf
+            elif attr_name == "upper" or attr_name == "effort" or attr_name == "velocity" or attr_name == "acceleration" or attr_name == "jerk":
+                return math.inf
+            elif attr_name == "deceleration":
+                return limit.acceleration if limit.acceleration is not None else math.inf
+        else:
+            if attr_name == "lower" or attr_name == "upper" or attr_name == "effort" or attr_name == "velocity":
+                return 0.0
+        return None
+
+    def get_limit_with_default(self, limit: ElementLimit, attr_name: str) -> float:
+        """
+        Get the limit value with the default value.
+
+        Args:
+            limit: The limit element.
+            attr_name: The name of the attribute.
+
+        Returns:
+            The limit value with the default value.
+        """
+        if getattr(limit, attr_name) is None:
+            return self._resolve_limit_defaults(limit, attr_name)
+        return getattr(limit, attr_name)

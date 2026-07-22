@@ -152,6 +152,9 @@ reserved_element_attribute_names = [
             "upper",
             "effort",
             "velocity",
+            "acceleration",
+            "deceleration",
+            "jerk",
         ],
     },
     {

@@ -15,6 +15,7 @@ from .urdf_parser.elements import (
     ElementCollision,
     ElementInertia,
     ElementJoint,
+    ElementLimit,
     ElementLink,
     ElementMesh,
     ElementVisual,
@@ -345,9 +346,10 @@ def physics_joints(parent: Usd.Prim, link: ElementLink, data: ConversionData):
 
         axis = Gf.Vec3f(joint.axis.get_with_default("xyz")) if joint.axis else Gf.Vec3f(1, 0, 0)
 
-        # If limit is omitted, set to 0.0
-        limit_lower = joint.limit.get_with_default("lower") if joint.limit is not None else 0.0
-        limit_upper = joint.limit.get_with_default("upper") if joint.limit is not None else 0.0
+        # Resolve version-aware defaults when limit attributes are omitted.
+        limit = joint.limit if joint.limit is not None else ElementLimit()
+        limit_lower = data.urdf_parser.get_limit_with_default(limit, "lower")
+        limit_upper = data.urdf_parser.get_limit_with_default(limit, "upper")
 
         physics_joint = None
         if joint.type == "fixed":
@@ -376,7 +378,7 @@ def physics_joints(parent: Usd.Prim, link: ElementLink, data: ConversionData):
             if joint.mimic and joint.mimic.joint:
                 mimic_joints_names.append(joint.name)
 
-            apply_newton_joint_api(joint, physics_joint.GetPrim())
+            apply_newton_joint_api(joint, physics_joint.GetPrim(), data)
             convert_unsupported_attributes_and_elements(joint, physics_joint.GetPrim(), data)
 
             # Store custom attributes and custom elements for the specified element.
@@ -426,13 +428,14 @@ def _convert_joint_velocity_limit(joint_type: str, velocity: float) -> float:
     return velocity
 
 
-def apply_newton_joint_api(element_joint: ElementJoint, prim: Usd.Prim):
+def apply_newton_joint_api(element_joint: ElementJoint, prim: Usd.Prim, data: ConversionData):
     """
     Map URDF joint dynamics and velocity limits to NewtonJointAPI.
 
     Args:
         element_joint: ElementJoint in URDF
         prim: PhysicsJoint in USD
+        data: ConversionData
     """
     damping = None
     friction = None
@@ -443,7 +446,7 @@ def apply_newton_joint_api(element_joint: ElementJoint, prim: Usd.Prim):
         friction = element_joint.dynamics.get_with_default("friction")
 
     if element_joint.limit and element_joint.type in ("revolute", "continuous", "prismatic"):
-        velocity_limit = _convert_joint_velocity_limit(element_joint.type, element_joint.limit.get_with_default("velocity"))
+        velocity_limit = _convert_joint_velocity_limit(element_joint.type, data.urdf_parser.get_limit_with_default(element_joint.limit, "velocity"))
 
     if damping is None and friction is None and velocity_limit is None:
         return
@@ -468,9 +471,18 @@ def convert_unsupported_attributes_and_elements(element_joint: ElementJoint, pri
         data: ConversionData
     """
     if element_joint.limit:
-        effort = element_joint.limit.get_with_default("effort")
+        effort = data.urdf_parser.get_limit_with_default(element_joint.limit, "effort")
         if effort is not None:
             prim.CreateAttribute("urdf:limit:effort", Sdf.ValueTypeNames.Float, custom=True).Set(effort)
+        acceleration = data.urdf_parser.get_limit_with_default(element_joint.limit, "acceleration")
+        if acceleration is not None:
+            prim.CreateAttribute("urdf:limit:acceleration", Sdf.ValueTypeNames.Float, custom=True).Set(acceleration)
+        deceleration = data.urdf_parser.get_limit_with_default(element_joint.limit, "deceleration")
+        if deceleration is not None:
+            prim.CreateAttribute("urdf:limit:deceleration", Sdf.ValueTypeNames.Float, custom=True).Set(deceleration)
+        jerk = data.urdf_parser.get_limit_with_default(element_joint.limit, "jerk")
+        if jerk is not None:
+            prim.CreateAttribute("urdf:limit:jerk", Sdf.ValueTypeNames.Float, custom=True).Set(jerk)
 
     if element_joint.calibration:
         rising = element_joint.calibration.get_with_default("rising")
