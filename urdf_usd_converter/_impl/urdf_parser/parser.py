@@ -569,6 +569,28 @@ class URDFParser:
                             )
                         )
 
+        # URDF 1.1: rpy and quat_xyzw cannot both be specified on the same origin.
+        version = float(self.root_element.get_with_default("version"))
+        if version >= 1.1:
+            for origin in self._iter_origins():
+                if origin.rpy is not None and origin.quat_xyzw is not None:
+                    raise ValueError(self._get_error_message("Both rpy and quat_xyzw orientations are defined. Use either one or the other", origin))
+
+    def _iter_origins(self):
+        """Yield every origin pose in the robot."""
+        for link in self.root_element.links:
+            if link.inertial and link.inertial.origin:
+                yield link.inertial.origin
+            for visual in link.visuals:
+                if visual.origin:
+                    yield visual.origin
+            for collision in link.collisions:
+                if collision.origin:
+                    yield collision.origin
+        for joint in self.root_element.joints:
+            if joint.origin:
+                yield joint.origin
+
     def _get_element_class(self, tag_name: str, prev_element_tag: str) -> type[ElementBase]:
         """
         Get the element class that can use the specified tag name.

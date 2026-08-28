@@ -726,3 +726,26 @@ class TestURDFParser(ConverterTestCase):
             level=usdex.core.DiagnosticsLevel.eWarning,
         ):
             parser.parse()
+
+    def test_load_error_origin_rpy_and_quat_xyzw(self):
+        model_path = pathlib.Path("tests/data/error_origin_rpy_and_quat_xyzw.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r".*origin: Both rpy and quat_xyzw orientations are defined. Use either one or the other \(line: 7\).*",
+        ):
+            parser.parse()
+
+    def test_load_origin_rpy_and_quat_xyzw_urdf_10(self):
+        model_path = pathlib.Path("tests/data/warning_urdf_10_rpy_and_quat_xyzw.urdf")
+        parser = URDFParser(model_path)
+
+        with usdex.test.ScopedDiagnosticChecker(
+            self,
+            [
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*capsule and quat_xyzw are unavailable when the URDF version is earlier than 1.1.*"),
+            ],
+            level=usdex.core.DiagnosticsLevel.eWarning,
+        ):
+            parser.parse()

@@ -12,6 +12,7 @@ from .urdf_parser.elements import (
     ElementCollision,
     ElementJoint,
     ElementMesh,
+    ElementPose,
     ElementVisual,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "float3_to_quatf",
     "get_authoring_metadata",
     "get_geometry_name",
+    "origin_orientation",
     "set_schema_attribute",
     "set_transform",
 ]
@@ -70,21 +72,30 @@ def get_geometry_name(element: ElementVisual | ElementCollision) -> str:
     return element.geometry.shape.tag
 
 
+def origin_orientation(origin: ElementPose) -> Gf.Quatd:
+    """
+    Get the orientation of the origin.
+
+    In URDF 1.1,
+    the orientation can be obtained from either "rpy" or "quat_xyzw" within the "origin" element.
+    You cannot specify both of these.
+    """
+    if origin.quat_xyzw is not None:
+        return Gf.Quatd(origin.quat_xyzw[3], origin.quat_xyzw[0], origin.quat_xyzw[1], origin.quat_xyzw[2])
+    return float3_to_quatd(origin.get_with_default("rpy"))
+
+
 def set_transform(prim: UsdGeom.Xformable, element: ElementJoint | ElementVisual | ElementCollision) -> None:
     # get the current transform (including any inherited via references)
     pos, pivot, orient, scale = usdex.core.getLocalTransformComponentsQuat(prim)
     current_transform = Gf.Transform(translation=pos, rotation=Gf.Rotation(orient), scale=Gf.Vec3d(scale), pivotPosition=pivot)
 
     position = Gf.Vec3d(0, 0, 0)
-    orientation = Gf.Quatf.GetIdentity()
+    orientation = Gf.Quatd.GetIdentity()
 
     if element.origin:
         position = Gf.Vec3d(element.origin.get_with_default("xyz"))
-        if element.origin.quat_xyzw is not None:
-            quat_xyzw = element.origin.get_with_default("quat_xyzw")
-            orientation = Gf.Quatf(quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2])
-        else:
-            orientation = float3_to_quatf(element.origin.get_with_default("rpy"))
+        orientation = origin_orientation(element.origin)
 
     local_transform: Gf.Transform = Gf.Transform(translation=position, rotation=Gf.Rotation(orientation))
     final_transform: Gf.Transform = multiply_transforms_preserve_scale(current_transform, local_transform)
