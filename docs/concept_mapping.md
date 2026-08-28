@@ -18,6 +18,7 @@ To facilitate a shared understanding between subject matter experts of these com
 | :---- | :---- |
 | ROS2 | [ROS Humble Docs](https://docs.ros.org/en/humble/index.html) |
 | URDF 2.13.0 | [ROS URDF Docs](https://wiki.ros.org/urdf/), [ROS2 URDF Packages](https://github.com/ros2/urdf/tree/2.13.0) [URDF XML Schema](https://raw.githubusercontent.com/ros/urdfdom/master/xsd/urdf.xsd), [MathWorks URDF Guide](https://www.mathworks.com/help/sm/ug/urdf-model-import.html) |
+| URDF 1.1 / 1.2 | [urdfdom README](https://github.com/ros/urdfdom/blob/rolling/README.md) (capsule, `quat_xyzw`, extended joint limits) |
 
 ### OpenUSD Reference
 
@@ -52,6 +53,7 @@ Newton is an extensible physics engine focussed on robot learning and developmen
 | Sensor | A device that understands its surroundings and obtains the information it needs to operate appropriately. |
 | Actuator | A device that uses energy such as electricity, hydraulics, or air pressure to create mechanical movement (e.g a motor) |
 | rpy | Roll(x) / Pitch(y) / Yaw(z) |
+| quat_xyzw | URDF 1.1 quaternion orientation as (x, y, z, w); an alternative to `rpy` on `<origin>` |
 | Composition | USD process of resolving layered opinions about the content into a definitive representation called a “stage”. The composed stage is not optimized for any runtime, but rather for navigability of the data. |
 | Asset | Data organization concept within content pipelines; a set of data that can be identified and located; e.g. each robot is an asset, each texture file is an asset. |
 | Component | An atomic asset/model representing one high-level element (e.g. prop, actor) in a 3D scene. |
@@ -376,12 +378,15 @@ While both inertial & MassAPI are considered optional, the semantics of omission
 
 ##### Element: origin
 
-The origin of an inertial element is the position and orientation of the link’s center of mass relative to the link itself. Unlike geometry or joint origin, this origin represents physical behavior (as opposed to placement in 3D space). It is broken down into two properties:
+The origin of an inertial element is the position and orientation of the link’s center of mass relative to the link itself. Unlike geometry or joint origin, this origin represents physical behavior (as opposed to placement in 3D space). It is broken down into the following properties:
 
 | URDF | OpenUSD | Description |
 | :---- | :---- | :---- |
 | [xyz](#property-xyz) | `physics:centerOfMass` | Position |
 | [rpy](#property-rpy) | `physics:principalAxes`,<br>`newton:inertia` (see also [inertia](#element-inertia)) | Orientation of the inertial frame relative to the link, represented as roll, pitch, yaw Euler rotations in radians |
+| [quat_xyzw](#property-quat_xyzw) | `physics:principalAxes`,<br>`newton:inertia` (see also [inertia](#element-inertia)) | URDF 1.1 alternative orientation as a quaternion `(x, y, z, w)` |
+
+`rpy` and `quat_xyzw` must not be specified on the same origin (URDF 1.1). See [Appendix E](#element-origin-2).
 
 ###### *Property: xyz*
 
@@ -391,7 +396,11 @@ The `origin.xyz` maps to `physics:centerOfMass` attribute of `UsdPhysicsMassAPI`
 
 The `origin.rpy` of an inertial element is the orientation of the inertial frame (in which the URDF inertia tensor is expressed) relative to the link frame. They are stored in URDF as roll, pitch, yaw Euler rotations in radians.
 
-This concept is not directly representable in UsdPhysics as a separate attribute, so it must be baked into both `physics:principalAxes` and `newton:inertia`. See [inertia](#element-inertia) for details. In short, `origin.rpy` is used to form the body-frame tensor `I_body = R * I_urdf * R^T`; both USD representations are then derived from that single `I_body`, rather than composing `rpy` onto principal axes after decomposing the unrotated URDF tensor.
+This concept is not directly representable in UsdPhysics as a separate attribute, so it must be baked into both `physics:principalAxes` and `newton:inertia`. See [inertia](#element-inertia) for details. In short, `origin.rpy` or `origin.quat_xyzw` is used to form the body-frame tensor `I_body = R * I_urdf * R^T`; both USD representations are then derived from that single `I_body`, rather than composing the origin orientation onto principal axes after decomposing the unrotated URDF tensor.
+
+###### *Property: quat_xyzw*
+
+URDF 1.1 allows `origin.quat_xyzw` as an alternative to `origin.rpy`. The quaternion is stored as `(x, y, z, w)` and is normalized after parsing. It contributes the same `R` used for `I_body` as `rpy` does; do not compose both.
 
 ##### Element: mass
 
@@ -413,9 +422,9 @@ In URDF, this tensor is expressed in the inertial frame defined by [`origin`](#e
 2. Author `newton:inertia` (`NewtonMassAPI`) from `I_body` as `[Ixx, Iyy, Izz, Ixy, Ixz, Iyz]` **in the body's local (link) frame**.
 3. Author `physics:diagonalInertia` and `physics:principalAxes` from the eigenvalue decomposition of that same `I_body` (eigenvalues and eigenvectors respectively).
 
-Because both representations must describe inertia in the body frame, the URDF values must not be copied verbatim when `origin.rpy` is non-identity, and `physics:principalAxes` must not be derived by eigendecomposing the unrotated URDF tensor and then composing `origin.rpy` afterward.  
-`R` is built from `origin.rpy` using URDF's fixed-axis (extrinsic) XYZ convention, `R = Rz(yaw) * Ry(pitch) * Rx(roll)`, which is the assumption the whole transform rests on.  
-When `origin` is omitted or `rpy` is identity, `I_body = I_urdf` and the component mapping below matches the URDF attributes directly.  
+Because both representations must describe inertia in the body frame, the URDF values must not be copied verbatim when `origin.rpy` or `origin.quat_xyzw` is non-identity, and `physics:principalAxes` must not be derived by eigendecomposing the unrotated URDF tensor and then composing the origin orientation afterward.  
+`R` is taken from `origin.rpy` or `origin.quat_xyzw` (not both). For `rpy`, URDF's fixed-axis (extrinsic) XYZ convention is used, `R = Rz(yaw) * Ry(pitch) * Rx(roll)`. For `quat_xyzw`, `R` is the equivalent rotation from that quaternion.  
+When `origin` is omitted, or both orientations are identity, `I_body = I_urdf` and the component mapping below matches the URDF attributes directly.  
 `origin.xyz` affects only `physics:centerOfMass`; it does not change the inertia tensor.
 
 `newton:inertia` is a `double[]`, so `R` should be built in double precision. Deriving it from a single-precision quaternion loses roughly 7 significant digits, which defeats the purpose of an attribute whose schema documentation states that *"Double precision prevents lossy conversion from source data that already represents the full tensor"*.
@@ -447,7 +456,7 @@ In USD this maps to various subclasses of `UsdGeomGprim`, which are themselves X
 
 | URDF | OpenUSD | Description |
 | :---- | :---- | :---- |
-| [origin](#element-origin-2) | `UsdGeomXformOp` (`TypeTranslate`, `TypeRotateXYZ`) | Local space position and orientation |
+| [origin](#element-origin-2) | `UsdGeomXformOp` (`TypeTranslate`, `TypeRotateXYZ` or `TypeOrient`) | Local space position and orientation |
 | [geometry](#element-geometry) | Various `UsdGeomGPrims`,<br>`UsdReference` (for meshes) | Visual geometry which does not affect simulation |
 | [material](#element-material) | `UsdShadeMaterial`,<br>`UsdShadeShaders` | Shading information for the visual geometry |
 
@@ -495,8 +504,8 @@ Collision geometry in USD should be additionally tagged using the "guide" [purpo
 
 | URDF | OpenUSD | Description |
 | :---- | :---- | :---- |
-| [origin](#element-origin-2) | `UsdGeomXformOp` (`TypeTranslate`, `TypeRotateXYZ`) | Local space position and orientation |
-| [geometry](#element-geometry-1) | `UsdGeomCube`,<br>`UsdGeomCylinder`,<br>`UsdGeomSphere`,<br>`UsdGeomMesh` | Geometry information |
+| [origin](#element-origin-2) | `UsdGeomXformOp` (`TypeTranslate`, `TypeRotateXYZ` or `TypeOrient`) | Local space position and orientation |
+| [geometry](#element-geometry-1) | `UsdGeomCube`,<br>`UsdGeomCylinder`,<br>`UsdGeomCapsule`,<br>`UsdGeomSphere`,<br>`UsdGeomMesh` | Geometry information |
 
 ##### Element: geometry
 
@@ -508,7 +517,7 @@ Note that if the geometry is a mesh, it should additionally have the `UsdPhysics
 
 ### geometry
 
-The geometry element has no attributes of its own. Instead it has a single required child element, which can be one of 4 types. The child element should determine the appropriate USD prim type for this geometry.
+The geometry element has no attributes of its own. Instead it has a single required child element, which can be one of 5 types. The child element should determine the appropriate USD prim type for this geometry.
 
 #### Geometry Elements
 
@@ -516,6 +525,7 @@ The geometry element has no attributes of its own. Instead it has a single requi
 | :---- | :---- | :---- |
 | [box](#element-box) | `UsdGeomCube` | A rectangular prism |
 | [cylinder](#element-cylinder) | `UsdGeomCylinder` | A cylinder |
+| [capsule](#element-capsule) | `UsdGeomCapsule` | A capsule (URDF 1.1): a cylinder capped with hemispheres |
 | [sphere](#element-sphere) | `UsdGeomSphere` | A sphere |
 | [mesh](#element-mesh) | `UsdGeomMesh`,<br>`UsdReference` | A triangulated mesh, described in an externally referenced file. |
 
@@ -547,6 +557,17 @@ In USD, this maps to a `UsdGeomCylinder` with `axis = "Z"`. Note that newer USD 
 | :---- | :---- | :---- |
 | radius | radius | Radius of the cylinder (along X & Y) |
 | length | height | Height of the cylinder (along Z) |
+
+##### Element: Capsule
+
+The capsule element (URDF 1.1) defines a cylinder capped with hemispheres at both ends, oriented along the Z axis of the frame. `length` is the cylindrical portion only (not including the caps). Both `radius` and `length` are required and must be non-negative finite values.
+
+In USD, this maps to a `UsdGeomCapsule` with `axis = "Z"`.
+
+| URDF | OpenUSD | Description |
+| :---- | :---- | :---- |
+| radius | radius | Radius of the cylinder and hemispherical caps |
+| length | height | Length of the cylindrical portion (along Z) |
 
 ##### Element: Sphere
 
@@ -825,6 +846,7 @@ In USD, transformation of body prims is handled separately to joints & the latte
 | :---- | :---- | :---- |
 | xyz | *Child Link* `XformOp` (`TypeTranslate`)<br>*Joint* `physics:localPos0` | Child link position relative to Parent link |
 | rpy | *Child Link* `XformOp` (`TypeRotateXYZ` or `TypeOrient`)<br>*Joint* `physics:localRot0` | Child link orientation relative to Parent link |
+| quat_xyzw | *Child Link* `XformOp` (`TypeOrient`)<br>*Joint* `physics:localRot0` | URDF 1.1 alternative orientation as a quaternion `(x, y, z, w)` |
 
 See [Appendix E](#element-origin-2) for additional consideration when authoring XformOps on the child link.
 
@@ -1168,12 +1190,15 @@ The encoding process could introduce name collisions that violate the first requ
 
 ### Element: origin
 
-A common concept within several URDF elements is the origin, which represents the position and orientation of some element relative to another. It is broken down into two properties:
+A common concept within several URDF elements is the origin, which represents the position and orientation of some element relative to another. It is broken down into the following properties:
 
 | URDF | OpenUSD | Description |
 | :---- | :---- | :---- |
 | [xyz](#property-xyz-2) | `UsdGeomXformOp` (`TypeTranslate`) | Position |
 | [rpy](#property-rpy-1) | `UsdGeomXformOp` (`TypeRotateXYZ` or `TypeOrient`) | Orientation as roll, pitch, yaw Euler rotations in radians |
+| [quat_xyzw](#property-quat_xyzw-1) | `UsdGeomXformOp` (`TypeOrient`) | URDF 1.1 alternative orientation as a quaternion `(x, y, z, w)` |
+
+`rpy` and `quat_xyzw` must not be specified on the same `<origin>` element. When `quat_xyzw` is present, use it; otherwise use `rpy` (omitted `rpy` is identity). Parsed `quat_xyzw` values are normalized.
 
 ###### *Property: xyz*
 
@@ -1188,6 +1213,10 @@ The `origin.rpy` rotation is specified as Roll(X) / Pitch(Y) / Yaw(Z) in radians
 However, most simulators prefer to work in quaternions, so it may be preferable to use a `UsdGeomXformOp` of `TypeOrient` instead. Both are valid approaches in USD.
 
 Note that rotational `XformOps` (whether Euler angles or quaternions) should typically prefer float precision.
+
+###### *Property: quat_xyzw*
+
+URDF 1.1 adds `origin.quat_xyzw` as an alternative to `origin.rpy`. The order is `(x, y, z, w)`. In USD this maps naturally to a `UsdGeomXformOp` of `TypeOrient` (USD quaternions are stored as `w, x, y, z`). Do not combine it with `rpy` on the same origin.
 
 ## Appendix F: Custom Attributes & Elements
 

@@ -191,6 +191,31 @@ class URDFParser:
             )
         return (float(values[0]), float(values[1]), float(values[2]), float(values[3]))
 
+    def _normalize_quat_xyzw(self, quat: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        """
+        Normalize a quaternion stored as (x, y, z, w).
+
+        This follows urdfdom's parser, which normalizes quat_xyzw after parsing.
+        A zero-length quaternion is replaced with the identity (0, 0, 0, 1).
+        """
+        x, y, z, w = quat
+        n = math.sqrt(x * x + y * y + z * z + w * w)
+        if n == 0.0:
+            return (0.0, 0.0, 0.0, 1.0)
+        return (x / n, y / n, z / n, w / n)
+
+    def _validate_non_negative_finite(self, value: float | None, attr_label: str, node: ET.Element) -> None:
+        """
+        Require a non-negative finite attribute value.
+
+        URDF 1.1 capsules require radius and length to be present and non-negative
+        finite values (urdfdom).
+        """
+        if value is None:
+            raise ValueError(self._get_error_message(f"{attr_label} is required", node))
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(self._get_error_message(f"{attr_label} must be a non-negative finite value", node))
+
     def _get_error_message(self, message: str, element: ElementBase | ET.Element) -> str:
         """
         Get an error message for an element.
@@ -273,6 +298,8 @@ class URDFParser:
         element.xyz = self._convert_attribute_float3(node, "xyz")
         element.rpy = self._convert_attribute_float3(node, "rpy")
         element.quat_xyzw = self._convert_attribute_float4(node, "quat_xyzw")
+        if element.quat_xyzw is not None:
+            element.quat_xyzw = self._normalize_quat_xyzw(element.quat_xyzw)
         if "radius" in node.attrib:
             element.radius = float(node.attrib["radius"])
         if "length" in node.attrib:
@@ -304,6 +331,10 @@ class URDFParser:
                 element.filename = node.attrib["filename"]
             else:
                 Tf.Warn(self._get_error_message("Filename is required", node))
+
+        elif isinstance(element, ElementCapsule):
+            self._validate_non_negative_finite(element.radius, "Radius", node)
+            self._validate_non_negative_finite(element.length, "Length", node)
 
         elif isinstance(element, ElementSafetyController):
             if "soft_lower_limit" in node.attrib:
@@ -767,15 +798,11 @@ class URDFParser:
             for visual in link.visuals:
                 if visual.geometry and visual.geometry.shape and isinstance(visual.geometry.shape, ElementCapsule):
                     used_capsule = True
-                if visual.origin and visual.origin.quat_xyzw is not None:
-                    used_quat_xyzw = True
             for collision in link.collisions:
                 if collision.geometry and collision.geometry.shape and isinstance(collision.geometry.shape, ElementCapsule):
                     used_capsule = True
-                if collision.origin and collision.origin.quat_xyzw is not None:
-                    used_quat_xyzw = True
-        for joint in self.root_element.joints:
-            if joint.origin and joint.origin.quat_xyzw is not None:
+        for origin in self._iter_origins():
+            if origin.quat_xyzw is not None:
                 used_quat_xyzw = True
 
         # If capsule or quat_xyzw is being used and the URDF version is earlier than 1.1, output a warning.

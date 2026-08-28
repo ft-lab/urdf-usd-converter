@@ -366,7 +366,11 @@ class TestURDFParser(ConverterTestCase):
         self.assertTrue(inertial.origin)
         self.assertEqual(inertial.origin.get_with_default("xyz"), (0.0, 0.0, 0.3))
         self.assertEqual(inertial.origin.get_with_default("rpy"), (0.0, 0.0, 0.0))
-        self.assertEqual(inertial.origin.get_with_default("quat_xyzw"), (0.0, 0.70710678, 0.0, 0.70710678))
+        quat_xyzw = inertial.origin.get_with_default("quat_xyzw")
+        self.assertAlmostEqual(quat_xyzw[0], 0.0)
+        self.assertAlmostEqual(quat_xyzw[1], 0.70710678)
+        self.assertAlmostEqual(quat_xyzw[2], 0.0)
+        self.assertAlmostEqual(quat_xyzw[3], 0.70710678)
         self.assertTrue(inertial.mass)
         self.assertEqual(inertial.mass.get_with_default("value"), 1.0)
         self.assertTrue(inertial.inertia)
@@ -748,4 +752,56 @@ class TestURDFParser(ConverterTestCase):
             ],
             level=usdex.core.DiagnosticsLevel.eWarning,
         ):
+            parser.parse()
+
+    def test_load_warning_urdf_10_inertial_quat_xyzw(self):
+        model_path = pathlib.Path("tests/data/warning_urdf_10_inertial_quat_xyzw.urdf")
+        parser = URDFParser(model_path)
+
+        with usdex.test.ScopedDiagnosticChecker(
+            self,
+            [
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*capsule and quat_xyzw are unavailable when the URDF version is earlier than 1.1.*"),
+            ],
+            level=usdex.core.DiagnosticsLevel.eWarning,
+        ):
+            parser.parse()
+
+    def test_load_urdf_11_quat_xyzw_normalize(self):
+        model_path = pathlib.Path("tests/data/urdf_11_quat_xyzw_normalize.urdf")
+        parser = URDFParser(model_path)
+        parser.parse()
+
+        root_element = parser.get_root_element()
+        visual_origin = root_element.links[0].visuals[0].origin
+        self.assertEqual(visual_origin.quat_xyzw, (0.0, 0.0, 0.0, 1.0))
+        inertial_origin = root_element.links[0].inertial.origin
+        self.assertEqual(inertial_origin.quat_xyzw, (0.0, 0.0, 0.0, 1.0))
+
+    def test_load_error_capsule_no_radius(self):
+        model_path = pathlib.Path("tests/data/error_capsule_no_radius.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*capsule: Radius is required \(line: 7\).*"):
+            parser.parse()
+
+    def test_load_error_capsule_no_length(self):
+        model_path = pathlib.Path("tests/data/error_capsule_no_length.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*capsule: Length is required \(line: 7\).*"):
+            parser.parse()
+
+    def test_load_error_capsule_negative_radius(self):
+        model_path = pathlib.Path("tests/data/error_capsule_negative_radius.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*capsule: Radius must be a non-negative finite value \(line: 7\).*"):
+            parser.parse()
+
+    def test_load_error_capsule_non_finite_length(self):
+        model_path = pathlib.Path("tests/data/error_capsule_non_finite_length.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*capsule: Length must be a non-negative finite value \(line: 7\).*"):
             parser.parse()
