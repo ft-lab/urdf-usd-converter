@@ -607,6 +607,19 @@ class URDFParser:
                 if origin.rpy is not None and origin.quat_xyzw is not None:
                     raise ValueError(self._get_error_message("Both rpy and quat_xyzw orientations are defined. Use either one or the other", origin))
 
+        # URDF 1.2: revolute and prismatic joints require both lower and upper, and upper >= lower.
+        if version >= 1.2:
+            for joint in self.root_element.joints:
+                if joint.type not in ("revolute", "prismatic"):
+                    continue
+                limit = joint.limit
+                if limit is None or limit.lower is None:
+                    raise ValueError(self._get_error_message("Lower is required for revolute and prismatic joints", limit or joint))
+                if limit.upper is None:
+                    raise ValueError(self._get_error_message("Upper is required for revolute and prismatic joints", limit))
+                if limit.upper < limit.lower:
+                    raise ValueError(self._get_error_message("Upper must be greater than or equal to lower", limit))
+
     def _iter_origins(self):
         """Yield every origin pose in the robot."""
         for link in self.root_element.links:

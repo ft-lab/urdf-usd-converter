@@ -624,3 +624,38 @@ class TestJoints(ConverterTestCase):
         self.assertTrue(joint_d_prim.HasAPI("NewtonMimicAPI"))
         self.assertAlmostEqual(joint_d_prim.GetAttribute("newton:mimicCoef0").Get(), 0.25, places=6)
         self.assertAlmostEqual(joint_d_prim.GetAttribute("newton:mimicCoef1").Get(), 2.0)
+
+    def test_urdf_12_joint_limits(self):
+        input_path = "tests/data/urdf_12_joint_limits.urdf"
+        output_dir = self.tmpDir()
+
+        asset_path = urdf_usd_converter.Converter().convert(input_path, output_dir)
+        self.assertIsNotNone(asset_path)
+        self.assertTrue(pathlib.Path(asset_path.path).exists())
+
+        stage: Usd.Stage = Usd.Stage.Open(asset_path.path)
+        self.assertIsValidUsd(stage)
+
+        physics_scope_prim = stage.GetDefaultPrim().GetChild("Physics")
+
+        revolute_prim = physics_scope_prim.GetChild("revolute_joint")
+        self.assertTrue(revolute_prim.IsA(UsdPhysics.RevoluteJoint))
+        self.assertTrue(revolute_prim.GetAttribute("urdf:limit:effort").IsCustom())
+        self.assertAlmostEqual(revolute_prim.GetAttribute("urdf:limit:effort").Get(), 100.0, places=6)
+        self.assertAlmostEqual(revolute_prim.GetAttribute("urdf:limit:acceleration").Get(), 10.0, places=6)
+        self.assertAlmostEqual(revolute_prim.GetAttribute("urdf:limit:deceleration").Get(), 5.0, places=6)
+        self.assertAlmostEqual(revolute_prim.GetAttribute("urdf:limit:jerk").Get(), 200.0, places=6)
+
+        prismatic_prim = physics_scope_prim.GetChild("prismatic_joint")
+        self.assertTrue(prismatic_prim.IsA(UsdPhysics.PrismaticJoint))
+        self.assertAlmostEqual(prismatic_prim.GetAttribute("urdf:limit:effort").Get(), 50.0, places=6)
+        self.assertAlmostEqual(prismatic_prim.GetAttribute("urdf:limit:acceleration").Get(), 2.0, places=6)
+        self.assertAlmostEqual(prismatic_prim.GetAttribute("urdf:limit:deceleration").Get(), 1.5, places=6)
+        self.assertAlmostEqual(prismatic_prim.GetAttribute("urdf:limit:jerk").Get(), 20.0, places=6)
+
+        continuous_prim = physics_scope_prim.GetChild("continuous_joint")
+        self.assertTrue(continuous_prim.IsA(UsdPhysics.RevoluteJoint))
+        self.assertEqual(continuous_prim.GetAttribute("urdf:limit:acceleration").Get(), 3.0)
+        self.assertEqual(continuous_prim.GetAttribute("urdf:limit:deceleration").Get(), 3.0)
+        self.assertEqual(continuous_prim.GetAttribute("urdf:limit:effort").Get(), math.inf)
+        self.assertEqual(continuous_prim.GetAttribute("urdf:limit:jerk").Get(), math.inf)

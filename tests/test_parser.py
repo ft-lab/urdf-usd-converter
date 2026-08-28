@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 The Newton Developers
 # SPDX-License-Identifier: Apache-2.0
+import math
 import pathlib
 
 import usdex.core
@@ -805,3 +806,89 @@ class TestURDFParser(ConverterTestCase):
 
         with self.assertRaisesRegex(RuntimeError, r".*capsule: Length must be a non-negative finite value \(line: 7\).*"):
             parser.parse()
+
+    def test_load_urdf_12_joint_limits(self):
+        model_path = pathlib.Path("tests/data/urdf_12_joint_limits.urdf")
+        parser = URDFParser(model_path)
+        parser.parse()
+
+        root_element = parser.get_root_element()
+        self.assertEqual(root_element.get_with_default("version"), "1.2")
+        self.assertEqual(len(root_element.joints), 3)
+
+        revolute = root_element.joints[0]
+        self.assertEqual(revolute.name, "revolute_joint")
+        self.assertEqual(revolute.limit.lower, -1.57)
+        self.assertEqual(revolute.limit.upper, 1.57)
+        self.assertEqual(revolute.limit.effort, 100.0)
+        self.assertEqual(revolute.limit.velocity, 1.0)
+        self.assertEqual(revolute.limit.acceleration, 10.0)
+        self.assertEqual(revolute.limit.deceleration, 5.0)
+        self.assertEqual(revolute.limit.jerk, 200.0)
+
+        prismatic = root_element.joints[1]
+        self.assertEqual(prismatic.name, "prismatic_joint")
+        self.assertEqual(prismatic.limit.acceleration, 2.0)
+        self.assertEqual(prismatic.limit.deceleration, 1.5)
+        self.assertEqual(prismatic.limit.jerk, 20.0)
+
+        continuous = root_element.joints[2]
+        self.assertEqual(continuous.name, "continuous_joint")
+        self.assertEqual(continuous.limit.acceleration, 3.0)
+        self.assertIsNone(continuous.limit.deceleration)
+        self.assertIsNone(continuous.limit.effort)
+        self.assertIsNone(continuous.limit.velocity)
+        self.assertIsNone(continuous.limit.jerk)
+        self.assertIsNone(continuous.limit.lower)
+        self.assertIsNone(continuous.limit.upper)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "deceleration"), 3.0)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "acceleration"), 3.0)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "effort"), math.inf)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "velocity"), math.inf)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "jerk"), math.inf)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "lower"), -math.inf)
+        self.assertEqual(parser.get_limit_with_default(continuous.limit, "upper"), math.inf)
+
+    def test_load_warning_urdf_12_joint_limits(self):
+        model_path = pathlib.Path("tests/data/warning_urdf_12_joint_limits.urdf")
+        parser = URDFParser(model_path)
+
+        with usdex.test.ScopedDiagnosticChecker(
+            self,
+            [
+                (Tf.TF_DIAGNOSTIC_WARNING_TYPE, ".*acceleration, deceleration, and jerk are unavailable when the URDF version is earlier than 1.2.*"),
+            ],
+            level=usdex.core.DiagnosticsLevel.eWarning,
+        ):
+            parser.parse()
+
+    def test_load_error_urdf_12_revolute_no_lower(self):
+        model_path = pathlib.Path("tests/data/error_urdf_12_revolute_no_lower.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*limit: Lower is required for revolute and prismatic joints \(line: 10\).*"):
+            parser.parse()
+
+    def test_load_error_urdf_12_prismatic_no_upper(self):
+        model_path = pathlib.Path("tests/data/error_urdf_12_prismatic_no_upper.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*limit: Upper is required for revolute and prismatic joints \(line: 10\).*"):
+            parser.parse()
+
+    def test_load_error_urdf_12_upper_less_than_lower(self):
+        model_path = pathlib.Path("tests/data/error_urdf_12_upper_less_than_lower.urdf")
+        parser = URDFParser(model_path)
+
+        with self.assertRaisesRegex(RuntimeError, r".*limit: Upper must be greater than or equal to lower \(line: 10\).*"):
+            parser.parse()
+
+    def test_load_urdf_11_revolute_optional_limits(self):
+        model_path = pathlib.Path("tests/data/urdf_11_revolute_optional_limits.urdf")
+        parser = URDFParser(model_path)
+        parser.parse()
+
+        joint = parser.get_root_element().joints[0]
+        self.assertIsNone(joint.limit.lower)
+        self.assertEqual(joint.limit.upper, 1.57)
+        self.assertEqual(parser.get_limit_with_default(joint.limit, "lower"), 0.0)
